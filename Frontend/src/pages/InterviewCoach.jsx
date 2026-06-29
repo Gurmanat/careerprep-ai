@@ -2,6 +2,8 @@
 import { useState } from "react";
 import axios from "axios";
 import CameraAnalysis from "../components/CameraAnalysis"; // ◀ PHASE 4
+import VoiceAnalysis from "../components/VoiceAnalysis";
+
 
 const API_BASE = "http://localhost:8000";
 
@@ -70,7 +72,14 @@ export default function InterviewCoach() {
   const [showCamera,    setShowCamera]    = useState(false);          // ◀ PHASE 4
   const [cameraMetrics, setCameraMetrics] = useState({               // ◀ PHASE 4
     eyeContact: 0, posture: 0, centering: 0,                         // ◀ PHASE 4
-  });                                                                 // ◀ PHASE 4
+  });  
+const [showVoice, setShowVoice] = useState(false);
+const [sessionVoiceMetrics, setSessionVoiceMetrics] = useState([]);
+
+// Handler — accumulates a reading per question answered
+const handleVoiceMetrics = (metrics) => {
+  setSessionVoiceMetrics((prev) => [...prev, metrics]);
+};                                                         // ◀ PHASE 4
 
   // ── Helpers ────────────────────────────────────────────────────
   const getResumeData = () => {
@@ -153,6 +162,8 @@ export default function InterviewCoach() {
     setCurrentIdx(0);
     setShowCamera(false);                                             // ◀ PHASE 4
     setCameraMetrics({ eyeContact: 0, posture: 0, centering: 0 });   // ◀ PHASE 4
+    setShowVoice(false);
+    setSessionVoiceMetrics([]);
   };
 
   // ──────────────────────────────────────────────────────────────
@@ -305,7 +316,11 @@ export default function InterviewCoach() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8 px-4">
         {/* Outer container widens when camera is open ◀ PHASE 4 */}
-        <div className={`mx-auto transition-all duration-300 ${showCamera ? "max-w-6xl" : "max-w-2xl"}`}>
+        <div
+          className={`mx-auto transition-all duration-300 ${
+            showCamera || showVoice ? "max-w-6xl" : "max-w-2xl"
+          }`}
+        >
 
           {/* Top bar */}
           <div className="flex items-center justify-between mb-4">
@@ -323,6 +338,17 @@ export default function InterviewCoach() {
                   : "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
               }`}>
               📷 {showCamera ? "Hide Camera" : "Camera Analysis"}
+            </button>
+            <button
+              onClick={() => setShowVoice((v) => !v)}
+              className={`flex items-center gap-2 text-xs font-semibold px-4 py-2
+                          rounded-full transition-all border ${
+                showVoice
+                  ? "bg-green-50 border-green-200 text-green-600 hover:bg-green-100"
+                  : "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100"
+              }`}
+              >
+              🎤 {showVoice ? "Hide Voice" : "Voice Analysis"}
             </button>
 
             <div className="text-right">
@@ -342,11 +368,10 @@ export default function InterviewCoach() {
           </div>
 
           {/* ◀ PHASE 4 — 2-column layout when camera is open */}
-          <div className={showCamera ? "flex gap-5 items-start" : ""}>
+          <div className={showCamera || showVoice ? "flex gap-5 items-start" : ""}>
 
             {/* ── LEFT COLUMN: question + feedback ── */}
-            <div className={showCamera ? "flex-1 min-w-0" : ""}>
-
+            <div className={showCamera || showVoice ? "flex-1 min-w-0" : ""}>
               {/* Question Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
 
@@ -521,17 +546,22 @@ export default function InterviewCoach() {
             {/* ── end LEFT COLUMN ── */}
 
             {/* ── RIGHT COLUMN: camera (Phase 4) ── */}  {/* ◀ PHASE 4 */}
+            <div className="w-72 shrink-0 sticky top-6 space-y-3">
+
             {showCamera && (
-              <div className="w-72 shrink-0 sticky top-6 space-y-3">
-                <CameraAnalysis
-                  isActive={showCamera && phase === "interview"}
-                  onMetricsUpdate={(m) => setCameraMetrics(m)}
-                />
-                <p className="text-[10px] text-center text-gray-400">
-                  Metrics are rolling 3-second averages
-                </p>
-              </div>
+             <CameraAnalysis
+                isActive={showCamera && phase === "interview"}
+                onMetricsUpdate={(m) => setCameraMetrics(m)}
+              />
             )}
+
+  {showVoice && (
+    <VoiceAnalysis
+      onMetricsUpdate={handleVoiceMetrics}
+    />
+  )}
+
+</div>
 
           </div>
           {/* ── end 2-column wrapper ── */}
@@ -624,6 +654,43 @@ export default function InterviewCoach() {
             </div>
           </div>
         )}
+        
+        {sessionVoiceMetrics.length > 0 && (() => {
+          const avg = (key) => Math.round(
+            sessionVoiceMetrics.reduce((s, m) => s + (m[key] ?? 0), 0) / sessionVoiceMetrics.length
+          );
+          return (
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+              <h3 className="font-semibold text-white mb-4">🎤 Voice Performance</h3>
+              {[
+                { label: "Overall Voice",   val: avg("overall") },
+                { label: "Filler Words",    val: avg("fillers")  },
+                { label: "Speaking Pace",   val: avg("pace")     },
+                { label: "Vocal Tone",      val: avg("tone")     },
+                { label: "Energy & Volume", val: avg("energy")   },
+              ].map(({ label, val }) => (
+                <div key={label} className="mb-3">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-300">{label}</span>
+                    <span className="font-bold text-indigo-400">{val}/100</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700
+                        ${val >= 80 ? "bg-green-500" : val >= 55 ? "bg-yellow-500" : "bg-red-500"}`}
+                      style={{ width: `${val}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-slate-400 mt-3">
+                Avg {avg("wpm")} WPM · {Math.round(
+                  sessionVoiceMetrics.reduce((s, m) => s + (m.fillerCount ?? 0), 0) / sessionVoiceMetrics.length
+                )} fillers/answer
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Question Breakdown */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-5">

@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.resume import router as resume_router
 from routes import interview 
+from routes.voice import router as voice_router 
+
 
 # Create the FastAPI app
 app = FastAPI(title="CareerPrep AI API", version="1.0.0")
@@ -19,6 +21,7 @@ app.add_middleware(
 # Register the resume routes under /resume prefix
 app.include_router(resume_router, prefix="/resume")
 app.include_router(interview.router, prefix="/interview", tags=["Interview"])
+app.include_router(voice_router) 
 
 # Health check endpoint — confirms API is running
 @app.get("/")
