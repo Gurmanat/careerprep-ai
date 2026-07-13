@@ -6,7 +6,7 @@ import json
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # ── Load embedding model once at startup (cached) ──────────────────────────
 # all-MiniLM-L6-v2 is small (80 MB), fast, and great for resume text

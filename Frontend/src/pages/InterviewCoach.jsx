@@ -1,11 +1,12 @@
 // frontend/src/pages/InterviewCoach.jsx
-import { useState } from "react";
+import { useState ,useEffect } from "react";
 import axios from "axios";
 import CameraAnalysis from "../components/CameraAnalysis"; // ◀ PHASE 4
 import VoiceAnalysis from "../components/VoiceAnalysis";
-
+import ResumeIndexer from "../components/ResumeIndexer";
 
 const API_BASE = "http://localhost:8000";
+
 
 const QUESTION_TYPES = [
   { id: "technical",   label: "Technical",   icon: "💻", desc: "Coding, ML, tools"   },
@@ -48,6 +49,16 @@ const Spinner = () => (
 
 export default function InterviewCoach() {
   const [phase, setPhase] = useState("setup"); // setup | interview | summary
+
+  const [sessionId, setSessionId]   = useState("");
+  const [ragIndexed, setRagIndexed] = useState(false);
+
+  // Generate a session ID from the backend on first load
+  useEffect(() => {
+    axios.post("http://localhost:8000/rag/new-session")
+      .then(({ data }) => setSessionId(data.session_id))
+      .catch(() => setSessionId(crypto.randomUUID())); // fallback
+  }, []);
 
   // ── Setup ──────────────────────────────────────────────────────
   const [jobRole,          setJobRole]          = useState("");
@@ -111,9 +122,10 @@ const handleVoiceMetrics = (metrics) => {
     try {
       const { data } = await axios.post(`${API_BASE}/interview/generate-questions`, {
         job_role:       jobRole,
-        resume_data:    useResume ? getResumeData() : null,
         question_types: selectedTypes,
-        num_questions:  numQuestions,
+        count: numQuestions,
+        resume_context: "",
+        session_id: sessionId,
       });
       setQuestions(data.questions);
       setAnswers({});
@@ -144,6 +156,7 @@ const handleVoiceMetrics = (metrics) => {
         question: q.question,
         answer:   ans,
         job_role: jobRole,
+        session_id: sessionId,
       });
       setFeedbacks((prev) => ({ ...prev, [qId]: data }));
     } catch (err) {
@@ -182,6 +195,14 @@ const handleVoiceMetrics = (metrics) => {
               Role-specific questions + instant AI feedback on every answer
             </p>
           </div>
+
+          {sessionId && (
+            <ResumeIndexer
+            sessionId={sessionId}
+            isIndexed={ragIndexed}
+            onIndexed={setRagIndexed}
+            />
+          )}
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-7 space-y-6">
 
@@ -350,6 +371,12 @@ const handleVoiceMetrics = (metrics) => {
               >
               🎤 {showVoice ? "Hide Voice" : "Voice Analysis"}
             </button>
+
+            {ragIndexed && (
+              <span className="text-xs bg-indigo-600/30 text-indigo-300 border border-indigo-700 rounded-full px-2 py-0.5 font-medium">
+                🧠 RAG Active
+              </span>
+            )}
 
             <div className="text-right">
               <p className="text-xs text-gray-400">

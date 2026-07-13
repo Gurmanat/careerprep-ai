@@ -1,7 +1,7 @@
 from groq import Groq
 from dotenv import load_dotenv
 import json 
-
+from services.rag_service import retrieve, has_index
 
 print("OK")
 import os
@@ -132,53 +132,64 @@ def match_with_jd(resume_data: dict, job_description: str) -> dict:
 
 async def generate_interview_questions(
     job_role: str,
-    resume_data: dict = None,
-    question_types: list = None,
-    num_questions: int = 5,
+    question_types: list,
+    count: int,
+    resume_context: str = "",
+    session_id: str = "",
 ) -> list:
 
-    if question_types is None:
-        question_types = ["technical", "behavioral", "situational"]
+    # Retrieve relevant resume chunks from FAISS
+    rag_context = ""
+    if session_id and has_index(session_id):
+        chunks = retrieve(
+            session_id,
+            f"{job_role} skills experience projects",
+            top_k=5
+        )
 
-    resume_context = ""
-    if resume_data:
-        skills = resume_data.get("skills", [])
-        experience = resume_data.get("experience", [])
-        projects = resume_data.get("projects", [])
-        resume_context = f"""
-Candidate Profile:
-- Skills: {', '.join(skills) if isinstance(skills, list) else skills}
-- Experience: {json.dumps(experience)}
-- Projects: {json.dumps(projects)}
-"""
+        if chunks:
+            rag_context = "\n\nRelevant Resume Excerpts:\n"
+            rag_context += "\n---\n".join(chunks)
 
-    prompt = f"""You are an expert technical interviewer for {job_role} positions.
-Generate exactly {num_questions} interview questions.
-Types to include: {', '.join(question_types)}.
-{resume_context}
+    context = rag_context if rag_context else (
+        f"\nResume Context:\n{resume_context}" if resume_context else ""
+    )
 
-Return ONLY a valid JSON array. Each object must have exactly these fields:
+    prompt = f"""
+You are an expert interviewer for {job_role} positions.
+
+Generate exactly {count} interview questions.
+
+Question types:
+{", ".join(question_types)}
+
+{context}
+
+If resume excerpts are available, personalise the questions using the candidate's projects, skills, technologies and experience.
+
+Return ONLY valid JSON.
+
 [
   {{
     "id": 1,
-    "question": "Full question text here",
+    "question": "...",
     "type": "technical",
-    "difficulty": "medium",
-    "hint": "Brief tip on how to approach this question"
+    "difficulty": "easy",
+    "hint": "..."
   }}
 ]
-Difficulty must be one of: easy, medium, hard.
-Type must be one of: technical, behavioral, situational.
-Return ONLY the JSON array. No markdown, no explanation, no code fences."""
+"""
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
         temperature=0.7,
     )
 
     content = response.choices[0].message.content.strip()
-    # Strip markdown code fences if present
+
     if content.startswith("```"):
         content = content.split("```")[1]
         if content.startswith("json"):
@@ -187,40 +198,57 @@ Return ONLY the JSON array. No markdown, no explanation, no code fences."""
 
     return json.loads(content)
 
-
 async def evaluate_interview_answer(
     question: str,
     answer: str,
     job_role: str,
+    session_id: str = "",
 ) -> dict:
 
-    prompt = f"""You are an expert interview coach for {job_role} positions.
-Evaluate this candidate's interview answer strictly and constructively.
+    rag_context = ""
 
-Question: {question}
-Candidate's Answer: {answer}
+    if session_id and has_index(session_id):
+        chunks = retrieve(session_id, question, top_k=3)
 
-Return ONLY a valid JSON object with exactly these fields:
+        if chunks:
+            rag_context = "\nCandidate Resume Context:\n"
+            rag_context += "\n---\n".join(chunks)
+
+    prompt = f"""
+You are an expert interview coach for {job_role} positions.
+
+Question:
+{question}
+
+Candidate Answer:
+{answer}
+
+{rag_context}
+
+Return ONLY valid JSON.
+
 {{
   "score": 7,
   "grade": "B",
-  "overall_feedback": "2-3 sentence summary of the answer quality.",
-  "strengths": ["strength one", "strength two"],
-  "improvements": ["area to improve one", "area to improve two"],
-  "sample_answer": "A strong model answer to this question.",
-  "keywords_used": ["keyword found in their answer"],
-  "keywords_missing": ["important keyword they should have used"]
+  "overall_feedback": "...",
+  "strengths": ["...", "..."],
+  "improvements": ["...", "..."],
+  "sample_answer": "...",
+  "keywords_used": ["..."],
+  "keywords_missing": ["..."]
 }}
-score must be an integer 1–10. grade must be A/B/C/D/F.
-Return ONLY the JSON object. No markdown, no explanation, no code fences."""
+"""
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
         temperature=0.3,
     )
 
     content = response.choices[0].message.content.strip()
+
     if content.startswith("```"):
         content = content.split("```")[1]
         if content.startswith("json"):

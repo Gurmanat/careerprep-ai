@@ -9,15 +9,17 @@ router = APIRouter()
 
 class GenerateQuestionsRequest(BaseModel):
     job_role: str
-    resume_data: Optional[dict] = None
-    question_types: Optional[List[str]] = ["technical", "behavioral", "situational"]
-    num_questions: Optional[int] = 5
+    question_types: List[str]
+    count: int
+    resume_context: str = ""
+    session_id: str = ""
 
 
 class EvaluateAnswerRequest(BaseModel):
     question: str
     answer: str
     job_role: str
+    session_id: str = ""
 
 
 @router.post("/generate-questions")
@@ -25,9 +27,10 @@ async def generate_questions(request: GenerateQuestionsRequest):
     try:
         questions = await generate_interview_questions(
             job_role=request.job_role,
-            resume_data=request.resume_data,
             question_types=request.question_types,
-            num_questions=request.num_questions,
+            count=request.count,
+            resume_context=request.resume_context,
+            session_id=request.session_id,
         )
         return {"questions": questions, "job_role": request.job_role}
     except Exception as e:
@@ -43,6 +46,7 @@ async def evaluate_answer(request: EvaluateAnswerRequest):
             question=request.question,
             answer=request.answer,
             job_role=request.job_role,
+            session_id=request.session_id,
         )
         return feedback
     except HTTPException:
